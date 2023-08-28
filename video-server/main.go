@@ -35,6 +35,9 @@ func main() {
 			addrString := addr.String()
 			//fmt.Println("接到消息了")
 			if _, ok := addrMap[addrString]; !ok {
+				if addrString == "<nil>" {
+					continue
+				}
 				channel := make(chan []byte, maxBytes)
 				addrMap[addrString] = struct {
 					addr    *net.UDPAddr

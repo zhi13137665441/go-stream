@@ -11,8 +11,12 @@ import (
 	"gocv.io/x/gocv"
 	"image"
 	"image/jpeg"
+	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"time"
 )
 
 var DataMap map[string]struct {
@@ -25,6 +29,10 @@ var window fyne.Window
 const maxBytes = 30000
 
 func init() {
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 	DataMap = map[string]struct {
 		addr string
 		card *widget.Card
@@ -65,8 +73,8 @@ func main() {
 func receive(conn *net.UDPConn) {
 	for {
 		var buf [maxBytes + 32]byte
-		len, err := conn.Read(buf[:]) // 读取数据 // 读取操作会阻塞直至有数据可读取
-		if len < 32 {
+		read, err := conn.Read(buf[:]) // 读取数据 // 读取操作会阻塞直至有数据可读取
+		if read < 32 {
 			fmt.Println("数据格式不匹配")
 			continue
 		}
@@ -97,6 +105,7 @@ func checkError(err error) {
 }
 
 func getCurrentCamara(camera *gocv.VideoCapture) []byte {
+	time.Sleep(time.Millisecond * 20)
 	// 读取一帧图像
 	img := gocv.NewMat()
 	if ok := camera.Read(&img); !ok {
@@ -105,10 +114,16 @@ func getCurrentCamara(camera *gocv.VideoCapture) []byte {
 	// 在图像上添加一些注解（如文本、线条、图形等）
 	// TODO: 在图像上添加注解的代码
 	// 将图像转换为 JPEG 格式
-	buf, _ := gocv.IMEncode(".jpg", img)
-	bytesRes := compressImageResource(buf.GetBytes())
+	buf, _ := gocv.IMEncode(".jpeg", img)
+	img.Close()
+	bufbytes := buf.GetBytes()
+	buf.Close()
+	bytesRes := compressImageResource(bufbytes)
 	setCardImage(DataMap["myself"].card, bytesRes)
 	fmt.Println(len(bytesRes))
+	if len(bytesRes) > maxBytes {
+		return []byte{}
+	}
 	return bytesRes
 }
 
@@ -122,8 +137,28 @@ func Send(conn *net.UDPConn, camera *gocv.VideoCapture) {
 }
 
 func setCardImage(card *widget.Card, bytes []byte) {
-	imageRes := fyne.NewStaticResource("current", bytes)
-	card.SetImage(canvas.NewImageFromResource(imageRes))
+
+	// 内存泄漏项
+	//if card.Image != nil {
+	//	if card.Image.Resource != nil {
+	//		card.Image.Resource = nil
+	//	}
+	//	card.Image = nil
+
+	//}
+	var resource *fyne.StaticResource
+	resource = &fyne.StaticResource{
+		StaticName:    "current",
+		StaticContent: bytes,
+	}
+	//img := canvas.Image{Resource: resource}
+	if card.Image != nil {
+		card.Image.Resource = resource
+	} else {
+
+		img := canvas.Image{Resource: resource}
+		card.SetImage(&img)
+	}
 	card.Refresh()
 }
 
@@ -132,7 +167,8 @@ func compressImageResource(data []byte) []byte {
 	if err != nil {
 		return data
 	}
-	buf := bytes.Buffer{}
+	var buf bytes.Buffer
+	defer buf.Reset()
 	err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 50})
 	if err != nil {
 		return data
