@@ -139,13 +139,12 @@ func Send(conn *net.UDPConn, camera *gocv.VideoCapture) {
 func setCardImage(card *widget.Card, bytes []byte) {
 
 	// 内存泄漏项
-	//if card.Image != nil {
-	//	if card.Image.Resource != nil {
-	//		card.Image.Resource = nil
-	//	}
-	//	card.Image = nil
-
-	//}
+	//card.SetImage(canvas.NewImageFromResource(fyne.NewStaticResource("", bytes)))
+	/*
+		//card.Image = &canvas.Image{
+		//	Resource: &fyne.StaticResource{StaticContent: bytes}}
+		//card.Refresh()
+	*/
 	var resource *fyne.StaticResource
 	resource = &fyne.StaticResource{
 		StaticName:    "current",
@@ -155,7 +154,6 @@ func setCardImage(card *widget.Card, bytes []byte) {
 	if card.Image != nil {
 		card.Image.Resource = resource
 	} else {
-
 		img := canvas.Image{Resource: resource}
 		card.SetImage(&img)
 	}
